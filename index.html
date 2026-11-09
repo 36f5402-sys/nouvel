@@ -37,12 +37,12 @@ input,select{font:inherit;font-size:.92rem;color:var(--ink);background:var(--sf)
 .more{display:block;margin:22px auto 0;border:1px solid var(--ink);background:none;color:var(--ink);border-radius:99px;padding:10px 26px;font:inherit;cursor:pointer}
 .em{color:var(--mu);padding:30px 0}
 footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--ln);font-size:.8rem;color:var(--mu)}
-@media (max-width:520px){.rk{width:22px;font-size:1.1rem}.bk{gap:10px}.lk{padding:6px 10px}.cv{width:40px;height:56px}}
+@media (max-width:520px){.rk{width:22px;font-size:1.1rem}.bk{gap:10px}.lk{padding:6px 10px}.cv{width:40px;height:56px}}\n.ai-panel{background:var(--sf);border:1px solid var(--ln);border-radius:14px;padding:18px;margin-top:10px}.ai-panel h2{font:700 1.2rem "Gowun Batang",serif;margin:0 0 8px}.ai-panel p{color:var(--mu);font-size:.88rem;margin:0 0 12px}.ai-panel textarea{width:100%;min-height:120px;resize:vertical;font:inherit;font-size:.95rem;color:var(--ink);background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:12px}.ai-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.ai-submit{border:0;border-radius:99px;background:var(--pick);color:var(--pickt);padding:10px 18px;font:inherit;cursor:pointer}.ai-submit:disabled{opacity:.55;cursor:wait}.ai-result{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;margin-top:18px;padding-top:16px;border-top:1px solid var(--ln)}
 </style></head><body><div class="w">
 <h1>연령별 인기 도서 조회 시스템</h1>
 <p class="lead">국립중앙도서관 대출 데이터 (2026.1.1 ~ 11.1) / 연령별 대출 상위 200권</p>
 <div class="shelf" id="ages" role="group" aria-label="연령대 선택"></div>
-<div class="tabs"><button class="tab on" data-t="top">인기 순위</button><button class="tab" data-t="rec">도서 추천</button></div>
+<div class="tabs"><button class="tab on" data-t="top">인기 순위</button><button class="tab" data-t="rec">도서 추천</button><button class="tab" data-t="ai">AI 맞춤 추천</button></div>
 <div id="view"></div>
 <footer>자료 출처: 국립중앙도서관 대출 데이터 / 추천: 작가 · 시리즈 · 분류 일치 기준</footer>
 </div>
@@ -105,7 +105,32 @@ function rec(){
  ${res.map(x=>card(x.b,ex(x),false)).join('')||'<p class="em">추천 결과 없음</p>'}`;
  $('#sc').onchange=e=>{scope=e.target.value;rec()};
 }
-function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.t===tab));tab==='top'?showTop():rec()}
+function showAI(){
+ $('#view').innerHTML=`<section class="ai-panel">
+ <h2>AI 맞춤 도서 추천</h2>
+ <p>지금 관심 있는 주제나 읽고 싶은 이유를 적어줘. 입력한 내용을 바탕으로 선택한 연령대의 도서 목록 안에서 추천해 줄게.</p>
+ <div class="row"><label for="ai-age" style="align-self:center;color:var(--mu);font-size:.9rem">기준 연령: <strong>${esc(G[age].label)}</strong></label></div>
+ <textarea id="ai-prompt" maxlength="1500" placeholder="예: 사람들의 판단이 왜 편향되는지 알고 싶어. 철학이나 심리학과 연결된 책을 추천해 줘."></textarea>
+ <div class="ai-actions"><button class="ai-submit" id="ai-go">맞춤 추천 받기</button><span id="ai-status" style="color:var(--mu);font-size:.84rem" role="status"></span></div>
+ <div class="ai-result" id="ai-result" hidden></div>
+ <p style="margin-top:14px">개인 이름, 연락처 등 민감한 정보는 입력하지 마. AI의 설명은 참고용이며, 실제 책 내용이나 인용구는 별도로 확인해야 해.</p>
+ </section>`;
+ const go=$('#ai-go'), prompt=$('#ai-prompt'), status=$('#ai-status'), result=$('#ai-result');
+ go.onclick=async()=>{
+  const question=prompt.value.trim();
+  if(question.length<8){status.textContent='관심사나 상황을 조금 더 구체적으로 적어 줘.';return}
+  go.disabled=true;status.textContent='도서를 살펴보고 있어…';result.hidden=true;result.textContent='';
+  try{
+   const books=G[age].books.map(b=>({title:b[1],author:b[3],publisher:b[4],year:b[5],category:catOf(b),isbn:b[7]}));
+   const response=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,ageLabel:G[age].label,books})});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||'추천을 불러오지 못했어.');
+   result.textContent=data.result||'추천 결과가 비어 있어. 다시 시도해 줘.';result.hidden=false;status.textContent='완료';
+  }catch(err){status.textContent=err.message||'오류가 발생했어. 잠시 뒤 다시 시도해 줘.'}
+  finally{go.disabled=false}
+ };
+}
+function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.t===tab));tab==='top'?showTop():tab==='rec'?rec():showAI()}
 document.addEventListener('click',e=>{
  const a=e.target.closest('[data-a]');if(a){age=+a.dataset.a;cat='전체';q='';shown=20;render();return}
  const t=e.target.closest('.tab');if(t){tab=t.dataset.t;render();return}
