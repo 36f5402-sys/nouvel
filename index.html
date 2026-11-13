@@ -200,6 +200,7 @@ function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classL
 document.addEventListener('click',e=>{
  const a=e.target.closest('[data-a]');if(a){age=+a.dataset.a;cat='전체';q='';shown=20;render();return}
  const t=e.target.closest('.tab');if(t){tab=t.dataset.t;render();return}
+ const mm=e.target.closest('[data-mm]');if(mm){mindSelected=mm.dataset.mm;render();return}
  const l=e.target.closest('[data-l]');if(l){const k=l.dataset.l;liked=liked.includes(k)?liked.filter(x=>x!==k):[...liked,k];render()}});
 render();
 </script></body></html>
