@@ -142,70 +142,89 @@ function showAI(){
  };
 }
 
-function mindTopic(b){
- const title=(b[1]||'')+' '+(b[2]||'');
- const normalized=(b[1]||'').replace(/[()（）\\s]/g,'');
- if(normalized.includes('세상의마지막기차역')) return '문학·이야기';
- if(normalized.includes('흔한남매수수께끼어드벤처')) return '문학·이야기';
- if(normalized.includes('침묵의봄')) return '환경·생태';
- const code=String(b[8]||'');
- const rules=[
-  ['AI·디지털',/인공지능|\\bAI\\b|디지털|로봇|알고리즘|컴퓨터|코딩|프로그래밍|AGI/i],
-  ['경제·돈',/경제|주식|투자|돈의|금융|자본|부자|소비|시장|기업/],
-  ['사회·정치',/사회|정치|전쟁|국가|민주|권력|법률|인권|국제|외교|노동|불평등/],
-  ['역사·세계',/역사|세계사|한국사|고구려|조선|세계|문명|문화유산|유럽/],
-  ['마음·관계',/마음|감정|심리|사랑|관계|친구|가족|외로움|행복|대화|공감/],
-  ['성장·삶',/성장|인생|삶|자존감|자기|습관|성공|꿈|용기|위로|나를/],
-  ['철학·인문',/철학|철학자|쇼펜하우어|주역|도덕경|부처|인간|존재|윤리|고전/],
-  ['과학·자연',/과학|우주|별|행성|공룡|곤충|바다|숲|동물|식물|자연|환경|기후/],
-  ['건강·몸',/건강|몸|뇌|의학|질병|허리|운동|면역|노화|환자/],
-  ['예술·문화',/미술|음악|예술|영화|사진|디자인|미술관|그림|작품|건축/],
-  ['여행·공간',/여행|도시|공간|탐험|지도/],
-  ['환경·생태',/환경|생태|기후|생물다양성|오염|생태계|자연보호/]
- ];
- for(const [name,re] of rules) if(re.test(title)) return name;
- const first=code.charAt(0);
- return ({'0':'지식·교양','1':'철학·인문','2':'종교·신앙','3':'사회·정치','4':'과학·자연','5':'기술·생활','6':'예술·문화','7':'언어','8':'문학·이야기','9':'역사·세계'})[first]||'문학·이야기';
-}
 let mindSelected='';
-function showMindMap(){
- const books=G[age].books;
- const groups=new Map();
- books.forEach(b=>{
-  const topic=mindTopic(b);
-  if(!groups.has(topic)) groups.set(topic,[]);
-  groups.get(topic).push(b);
- });
- const items=[...groups.entries()].map(([name,list])=>({
-  name,list,count:list.length,loans:list.reduce((sum,b)=>sum+(Number(b[9])||0),0)
- })).sort((a,b)=>b.count-a.count||b.loans-a.loans);
- if(!items.some(x=>x.name===mindSelected)) mindSelected='';
- const max=Math.max(1,...items.map(x=>x.count));
- const colors=['#2f6a95','#6d5a9c','#37785a','#b34a74','#b87925','#23808a','#8a5d42'];
- const selected=items.find(x=>x.name===mindSelected);
- $('#view').innerHTML=`
-  <section class="mm-head"><h2>MindMap: 요즘 우리 또래는?</h2>
-   <p>같은 나이의 사람들은 어떤 책을 읽고, 어떤 주제에 관심을 가질까?</p>
-  </section>
-  <div class="mm-cloud" aria-label="인기 대출 도서 주제 키워드">
-   ${items.map((x,i)=>{
-    const size=(.88+(x.count/max)*1.15).toFixed(2);
-    return `<button class="mm-word ${mindSelected===x.name?'on':''}" data-mm="${esc(x.name)}" style="--mm-size:${size}rem;--mm-color:${colors[i%colors.length]}" aria-pressed="${mindSelected===x.name}">${esc(x.name)}<small>${x.count}</small></button>`;
-   }).join('')}
-  </div>
-  <p class="mm-note">키워드 옆 숫자는 해당 주제로 분류된 도서 수야. 글자 크기는 도서 수를 기준으로 표시해.</p>
-  <section class="mm-results">
-   ${selected?`<h3>‘${esc(selected.name)}’ 관련 도서 ${selected.count}권</h3>
-    ${selected.list.sort((a,b)=>a[0]-b[0]).map(b=>card(b,'',true,books[0][9])).join('')}`
-    :'<p class="mm-empty">키워드를 선택하면 관련 도서와 대출 순위를 확인할 수 있어.</p>'}
-  </section>`;
+let mindRequest=0;
+const MIND_CATEGORIES=['AI·디지털','경제·금융','사회·정치','역사·세계','마음·관계','성장·삶','철학·윤리','과학·자연','환경·생태','건강·몸','예술·문화','여행·공간','문학·이야기','언어','종교·신앙','기타·분류 보류'];
+const mindMemory={};
+function mindCacheKey(i){return 'mindive-ai-categories-v1-'+i}
+function readMindCache(i){
+ if(mindMemory[i]) return mindMemory[i];
+ try{const raw=localStorage.getItem(mindCacheKey(i));if(raw){mindMemory[i]=JSON.parse(raw);return mindMemory[i]}}catch(e){}
+ return null;
 }
-
+function writeMindCache(i,value){
+ mindMemory[i]=value;
+ try{localStorage.setItem(mindCacheKey(i),JSON.stringify(value))}catch(e){}
+}
+async function classifyMindBooks(ageIndex,requestId){
+ const books=G[ageIndex].books;
+ const result={};
+ const batches=[];
+ for(let i=0;i<books.length;i+=30) batches.push(books.slice(i,i+30));
+ for(let n=0;n<batches.length;n++){
+  if(requestId!==mindRequest)return null;
+  const batch=batches[n];
+  const payload=batch.map((b,i)=>({id:String(i),title:b[1],subtitle:b[2]||'',author:b[3]||'',classification:b[8]||''}));
+  const response=await fetch('/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({books:payload})});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'AI 분류에 실패했어.');
+  if(!Array.isArray(data.items))throw new Error('AI 분류 결과 형식이 올바르지 않아.');
+  data.items.forEach(item=>{
+   const index=Number(item.id);
+   if(Number.isInteger(index)&&batch[index]&&MIND_CATEGORIES.includes(item.category)){
+    result[key(batch[index])]=item.category;
+   }
+  });
+  const status=$('#mm-status');
+  if(status&&requestId===mindRequest)status.textContent='AI가 도서를 분류하고 있어… ('+(n+1)+'/'+batches.length+')';
+ }
+ if(requestId!==mindRequest)return null;
+ writeMindCache(ageIndex,result);
+ return result;
+}
+async function showMindMap(){
+ const ageIndex=age,requestId=++mindRequest,books=G[ageIndex].books;
+ $('#view').innerHTML=`<section class="mm-head"><h2>MindMap: 요즘 우리 또래는?</h2>
+  <p>같은 나이의 사람들은 어떤 책을 읽고, 어떤 주제에 관심을 가질까?</p></section>
+  <p class="mm-note" id="mm-status">AI 분류 결과를 확인하고 있어…</p>`;
+ try{
+  let categories=readMindCache(ageIndex);
+  if(!categories||books.some(b=>!categories[key(b)])){
+   categories=await classifyMindBooks(ageIndex,requestId);
+   if(!categories)return;
+  }
+  if(requestId!==mindRequest)return;
+  const groups=new Map();
+  books.forEach(b=>{
+   const topic=categories[key(b)]||'기타·분류 보류';
+   if(!groups.has(topic))groups.set(topic,[]);
+   groups.get(topic).push(b);
+  });
+  const items=[...groups.entries()].map(([name,list])=>({name,list,count:list.length,loans:list.reduce((sum,b)=>sum+(Number(b[9])||0),0)}))
+   .sort((a,b)=>b.count-a.count||b.loans-a.loans);
+  if(!items.some(x=>x.name===mindSelected))mindSelected='';
+  const max=Math.max(1,...items.map(x=>x.count));
+  const colors=['#2f6a95','#6d5a9c','#37785a','#b34a74','#b87925','#23808a','#8a5d42'];
+  const selected=items.find(x=>x.name===mindSelected);
+  $('#view').innerHTML=`<section class="mm-head"><h2>MindMap: 요즘 우리 또래는?</h2>
+   <p>같은 나이의 사람들은 어떤 책을 읽고, 어떤 주제에 관심을 가질까?</p></section>
+   <div class="mm-cloud" aria-label="AI가 분류한 인기 대출 도서 주제 키워드">
+    ${items.map((x,i)=>{const size=(.88+(x.count/max)*1.15).toFixed(2);return `<button class="mm-word ${mindSelected===x.name?'on':''}" data-mm="${esc(x.name)}" style="--mm-size:${size}rem;--mm-color:${colors[i%colors.length]}" aria-pressed="${mindSelected===x.name}">${esc(x.name)}<small>${x.count}</small></button>`}).join('')}
+   </div>
+   <p class="mm-note">AI가 책의 제목·부제·저자·도서 분류번호를 종합해 주된 주제를 분류했어. 숫자는 해당 주제로 분류된 도서 수야. 분류 결과는 참고용이며 일부 책은 주제 해석에 따라 다르게 분류될 수 있어.</p>
+   <section class="mm-results">${selected?`<h3>‘${esc(selected.name)}’ 관련 도서 ${selected.count}권</h3>${selected.list.sort((a,b)=>a[0]-b[0]).map(b=>card(b,'',true,books[0][9])).join('')}`:'<p class="mm-empty">키워드를 선택하면 관련 도서와 대출 순위를 확인할 수 있어.</p>'}</section>`;
+ }catch(error){
+  if(requestId!==mindRequest)return;
+  $('#view').innerHTML=`<section class="mm-head"><h2>MindMap: 요즘 우리 또래는?</h2><p>AI 도서 분류를 완료하지 못했어.</p></section>
+   <p class="mm-note">${esc(error.message||'잠시 뒤 다시 시도해 줘.')}</p><button class="more" id="mm-retry">다시 분류하기</button>`;
+ }
+}
 function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.t===tab));tab==='top'?showTop():tab==='mind'?showMindMap():showAI()}
 document.addEventListener('click',e=>{
  const a=e.target.closest('[data-a]');if(a){age=+a.dataset.a;cat='전체';q='';shown=20;render();return}
  const t=e.target.closest('.tab');if(t){tab=t.dataset.t;render();return}
- const mm=e.target.closest('[data-mm]');if(mm){mindSelected=mm.dataset.mm;render();return}
+ const retry=e.target.closest('#mm-retry');if(retry){render();return}
+  const mm=e.target.closest('[data-mm]');if(mm){mindSelected=mm.dataset.mm;render();return}
  const l=e.target.closest('[data-l]');if(l){const k=l.dataset.l;liked=liked.includes(k)?liked.filter(x=>x!==k):[...liked,k];render()}});
 render();
 </script></body></html>
