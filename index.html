@@ -38,11 +38,22 @@ input,select{font:inherit;font-size:.92rem;color:var(--ink);background:var(--sf)
 .em{color:var(--mu);padding:30px 0}
 footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--ln);font-size:.8rem;color:var(--mu)}
 @media (max-width:520px){.rk{width:22px;font-size:1.1rem}.bk{gap:10px}.lk{padding:6px 10px}.cv{width:40px;height:56px}}\n.ai-panel{background:var(--sf);border:1px solid var(--ln);border-radius:14px;padding:18px;margin-top:10px}.ai-panel h2{font:700 1.2rem "Gowun Batang",serif;margin:0 0 8px}.ai-panel p{color:var(--mu);font-size:.88rem;margin:0 0 12px}.ai-panel textarea{width:100%;min-height:120px;resize:vertical;font:inherit;font-size:.95rem;color:var(--ink);background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:12px}.ai-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.ai-submit{border:0;border-radius:99px;background:var(--pick);color:var(--pickt);padding:10px 18px;font:inherit;cursor:pointer}.ai-submit:disabled{opacity:.55;cursor:wait}.ai-result{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;margin-top:18px;padding-top:16px;border-top:1px solid var(--ln)}
+
+/* MindMap */
+.mm-head{margin:4px 0 18px}.mm-head h2{font:700 1.45rem "Gowun Batang",serif;margin:0 0 6px}.mm-head p{margin:0;color:var(--mu);font-size:.9rem}
+.mm-note{font-size:.78rem;color:var(--mu);margin:14px 0 18px}
+.mm-cloud{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 14px;padding:24px 12px;background:var(--sf);border:1px solid var(--ln);border-radius:14px;min-height:230px}
+.mm-word{border:0;background:transparent;color:var(--mm-color,var(--ink));font:700 var(--mm-size,1rem) "Gowun Batang",serif;cursor:pointer;padding:5px 7px;border-radius:8px;transition:background .15s,transform .15s}
+.mm-word:hover,.mm-word:focus-visible{background:var(--hl);outline:none;transform:translateY(-2px)}
+.mm-word.on{background:var(--pick);color:var(--pickt)}
+.mm-word small{font:500 .68rem "Noto Sans KR",sans-serif;opacity:.75;margin-left:3px}
+.mm-results{margin-top:24px}.mm-results h3{margin-bottom:10px}.mm-empty{color:var(--mu);padding:20px 0}
+
 </style></head><body><div class="w">
 <h1>연령별 인기 도서 조회 시스템</h1>
 <p class="lead">국립중앙도서관 대출 데이터 (2026.1.1 ~ 11.1) / 연령별 대출 상위 200권</p>
 <div class="shelf" id="ages" role="group" aria-label="연령대 선택"></div>
-<div class="tabs"><button class="tab on" data-t="top">인기 순위</button><button class="tab" data-t="rec">도서 추천</button><button class="tab" data-t="ai">AI 맞춤 추천</button></div>
+<div class="tabs"><button class="tab on" data-t="top">인기 순위</button><button class="tab" data-t="rec">도서 추천</button><button class="tab" data-t="mind">MindMap</button><button class="tab" data-t="ai">AI 맞춤 추천</button></div>
 <div id="view"></div>
 <footer>자료 출처: 국립중앙도서관 대출 데이터 / 추천: 작가 · 시리즈 · 분류 일치 기준</footer>
 </div>
@@ -130,7 +141,62 @@ function showAI(){
   finally{go.disabled=false}
  };
 }
-function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.t===tab));tab==='top'?showTop():tab==='rec'?rec():showAI()}
+
+function mindTopic(b){
+ const title=(b[1]||'')+' '+(b[2]||'');
+ const code=String(b[8]||'');
+ const rules=[
+  ['AI·디지털',/인공지능|\\bAI\\b|디지털|로봇|알고리즘|컴퓨터|코딩|프로그래밍|AGI/i],
+  ['경제·돈',/경제|주식|투자|돈의|금융|자본|부자|소비|시장|기업/],
+  ['사회·정치',/사회|정치|전쟁|국가|민주|권력|법률|인권|국제|외교|노동|불평등/],
+  ['역사·세계',/역사|세계사|한국사|고구려|조선|세계|문명|문화유산|유럽/],
+  ['마음·관계',/마음|감정|심리|사랑|관계|친구|가족|외로움|행복|대화|공감/],
+  ['성장·삶',/성장|인생|삶|자존감|자기|습관|성공|꿈|용기|위로|나를/],
+  ['철학·인문',/철학|철학자|쇼펜하우어|주역|도덕경|부처|인간|존재|윤리|고전/],
+  ['과학·자연',/과학|우주|별|행성|공룡|곤충|바다|숲|동물|식물|자연|환경|기후/],
+  ['건강·몸',/건강|몸|뇌|의학|질병|허리|운동|면역|노화|환자/],
+  ['예술·문화',/미술|음악|예술|영화|사진|디자인|미술관|그림|작품|건축/],
+  ['여행·공간',/여행|기차|도시|공간|건축|탐험|지도/]
+ ];
+ for(const [name,re] of rules) if(re.test(title)) return name;
+ const first=code.charAt(0);
+ return ({'0':'지식·교양','1':'철학·인문','2':'종교·신앙','3':'사회·정치','4':'과학·자연','5':'기술·생활','6':'예술·문화','7':'언어','8':'문학·이야기','9':'역사·세계'})[first]||'문학·이야기';
+}
+let mindSelected='';
+function showMindMap(){
+ const books=G[age].books;
+ const groups=new Map();
+ books.forEach(b=>{
+  const topic=mindTopic(b);
+  if(!groups.has(topic)) groups.set(topic,[]);
+  groups.get(topic).push(b);
+ });
+ const items=[...groups.entries()].map(([name,list])=>({
+  name,list,count:list.length,loans:list.reduce((sum,b)=>sum+(Number(b[9])||0),0)
+ })).sort((a,b)=>b.count-a.count||b.loans-a.loans);
+ if(!items.some(x=>x.name===mindSelected)) mindSelected='';
+ const max=Math.max(1,...items.map(x=>x.count));
+ const colors=['#2f6a95','#6d5a9c','#37785a','#b34a74','#b87925','#23808a','#8a5d42'];
+ const selected=items.find(x=>x.name===mindSelected);
+ $('#view').innerHTML=`
+  <section class="mm-head"><h2>MindMap: 요즘 우리 또래는?</h2>
+   <p>같은 나이의 사람들은 어떤 책을 읽고, 어떤 주제에 관심을 가질까?</p>
+  </section>
+  <div class="mm-cloud" aria-label="인기 대출 도서 주제 키워드">
+   ${items.map((x,i)=>{
+    const size=(.88+(x.count/max)*1.15).toFixed(2);
+    return `<button class="mm-word ${mindSelected===x.name?'on':''}" data-mm="${esc(x.name)}" style="--mm-size:${size}rem;--mm-color:${colors[i%colors.length]}" aria-pressed="${mindSelected===x.name}">${esc(x.name)}<small>${x.count}</small></button>`;
+   }).join('')}
+  </div>
+  <p class="mm-note">키워드 옆 숫자는 해당 주제로 분류된 도서 수야. 글자 크기는 도서 수를 기준으로 표시해.</p>
+  <section class="mm-results">
+   ${selected?`<h3>‘${esc(selected.name)}’ 관련 도서 ${selected.count}권</h3>
+    ${selected.list.sort((a,b)=>a[0]-b[0]).map(b=>card(b,'',true,books[0][9])).join('')}`
+    :'<p class="mm-empty">키워드를 선택하면 관련 도서와 대출 순위를 확인할 수 있어.</p>'}
+  </section>`;
+}
+
+function render(){agesUI();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.t===tab));tab==='top'?showTop():tab==='rec'?rec():tab==='mind'?showMindMap():showAI()}
 document.addEventListener('click',e=>{
  const a=e.target.closest('[data-a]');if(a){age=+a.dataset.a;cat='전체';q='';shown=20;render();return}
  const t=e.target.closest('.tab');if(t){tab=t.dataset.t;render();return}
